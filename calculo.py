@@ -8,7 +8,7 @@ Luego se convierten a funciones NumPy rápidas con lambdify.
 
 import numpy as np
 import sympy as sp
-from scipy.optimize import minimize
+from scipy.optimize import minimize, fsolve
 
 # ============================================================
 # CÁLCULO SIMBÓLICO CON SYMPY (Sección 5 y 6 del PDF)
@@ -70,23 +70,107 @@ def hessiana_Q(x, y, xi, yi, wi):
     return np.array([[Qxx, Qxy], [Qxy, Qyy]])
 
 
+def clasificar_punto(H):
+    """Clasifica un punto crítico usando la Hessiana."""
+    det = np.linalg.det(H)
+    if det > 0 and H[0, 0] < 0:
+        return "Máximo local"
+    elif det > 0 and H[0, 0] > 0:
+        return "Mínimo local"
+    elif det < 0:
+        return "Punto de silla"
+    return "Inconcluso"
+
+
+def encontrar_puntos_criticos(xi, yi, wi, margen=3.0, n_grid=15,
+                               tol_grad=1e-8, tol_dedup=1e-3):
+    """
+    Encuentra TODOS los puntos críticos de Q(x,y) usando multi-start con fsolve.
+    Genera n_grid×n_grid puntos iniciales, resuelve ∇Q=0 desde cada uno,
+    filtra los no convergidos y deduplica.
+    """
+    x_min, x_max = xi.min() - margen, xi.max() + margen
+    y_min, y_max = yi.min() - margen, yi.max() + margen
+
+    x_starts = np.linspace(x_min, x_max, n_grid)
+    y_starts = np.linspace(y_min, y_max, n_grid)
+
+    candidatos = []
+
+    for xs in x_starts:
+        for ys in y_starts:
+            try:
+                sol, info, ier, _ = fsolve(
+                    lambda p: gradiente_Q(p[0], p[1], xi, yi, wi),
+                    [xs, ys], full_output=True
+                )
+                if ier != 1:
+                    continue
+                xc, yc = sol
+                grad = gradiente_Q(xc, yc, xi, yi, wi)
+                if np.sqrt(grad[0]**2 + grad[1]**2) > tol_grad:
+                    continue
+                if xc < x_min or xc > x_max or yc < y_min or yc > y_max:
+                    continue
+                candidatos.append((xc, yc))
+            except Exception:
+                continue
+
+    if not candidatos:
+        return []
+
+    unicos = [candidatos[0]]
+    for xc, yc in candidatos[1:]:
+        es_duplicado = False
+        for xu, yu in unicos:
+            if np.sqrt((xc - xu)**2 + (yc - yu)**2) < tol_dedup:
+                es_duplicado = True
+                break
+        if not es_duplicado:
+            unicos.append((xc, yc))
+
+    puntos = []
+    for xc, yc in unicos:
+        q_val = Q(xc, yc, xi, yi, wi)
+        H = hessiana_Q(xc, yc, xi, yi, wi)
+        det_h = np.linalg.det(H)
+        eigs = np.linalg.eigvals(H)
+        tipo = clasificar_punto(H)
+        puntos.append({
+            "x": xc, "y": yc, "Q": q_val,
+            "det_H": det_h, "Qxx": H[0, 0], "Qyy": H[1, 1], "Qxy": H[0, 1],
+            "eigenvalues": eigs, "tipo": tipo,
+        })
+
+    puntos.sort(key=lambda p: p["Q"], reverse=True)
+    return puntos
+
+
 def optimizar_antena(xi, yi, wi):
     """
-    Encuentra la ubicación óptima de la antena maximizando Q(x,y).
-    Usa el método BFGS con gradiente analítico (calculado por SymPy).
-    Retorna un dict con todos los resultados del análisis.
+    Encuentra la ubicación óptima (MÁXIMO GLOBAL) de la antena.
+    Usa multi-start para encontrar todos los puntos críticos y selecciona
+    el máximo con mayor Q(x,y).
     """
     x0_init = np.average(xi, weights=wi)
     y0_init = np.average(yi, weights=wi)
 
-    resultado = minimize(
-        fun=lambda p: -Q(p[0], p[1], xi, yi, wi),
-        x0=[x0_init, y0_init],
-        jac=lambda p: -gradiente_Q(p[0], p[1], xi, yi, wi),
-        method='BFGS'
-    )
+    todos_criticos = encontrar_puntos_criticos(xi, yi, wi)
 
-    x_opt, y_opt = resultado.x
+    maximos = [p for p in todos_criticos if p["tipo"] == "Máximo local"]
+
+    if maximos:
+        mejor = maximos[0]
+        x_opt, y_opt = mejor["x"], mejor["y"]
+    else:
+        resultado = minimize(
+            fun=lambda p: -Q(p[0], p[1], xi, yi, wi),
+            x0=[x0_init, y0_init],
+            jac=lambda p: -gradiente_Q(p[0], p[1], xi, yi, wi),
+            method='BFGS'
+        )
+        x_opt, y_opt = resultado.x
+
     Q_opt = Q(x_opt, y_opt, xi, yi, wi)
     grad_opt = gradiente_Q(x_opt, y_opt, xi, yi, wi)
     H_opt = hessiana_Q(x_opt, y_opt, xi, yi, wi)
@@ -103,6 +187,7 @@ def optimizar_antena(xi, yi, wi):
         "det_H": det_H,
         "x0_init": x0_init,
         "y0_init": y0_init,
+        "todos_los_puntos_criticos": todos_criticos,
     }
 
 

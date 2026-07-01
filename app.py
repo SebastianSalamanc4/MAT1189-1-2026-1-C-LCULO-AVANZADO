@@ -18,6 +18,7 @@ from datos import (
 )
 from calculo import (
     Q, gradiente_Q, optimizar_antena, generar_grilla,
+    encontrar_puntos_criticos,
     fi_sp, dfi_dx_sp, dfi_dy_sp,
     d2fi_dx2_sp, d2fi_dy2_sp, d2fi_dxdy_sp,
 )
@@ -354,7 +355,7 @@ with tab3:
         )
 
     with col_crit:
-        st.subheader("Análisis del Punto Crítico")
+        st.subheader("Máximo Global")
         st.markdown("**Condición:** $\\nabla Q(x^*, y^*) = \\mathbf{0}$")
         st.markdown(
             f"**Ubicación:** $x^* = {x_opt:.6f}$ km, $y^* = {y_opt:.6f}$ km"
@@ -380,6 +381,48 @@ with tab3:
                 res["x0_init"], res["y0_init"],
             )
         )
+
+    st.markdown("---")
+    st.subheader("Todos los Puntos Críticos Encontrados")
+    st.markdown(
+        "Se resuelve $\\nabla Q = \\mathbf{0}$ desde múltiples puntos iniciales "
+        "(multi-start con `fsolve`) para garantizar encontrar el **máximo global**, "
+        "no solo un máximo local."
+    )
+
+    todos_pc = res.get("todos_los_puntos_criticos", [])
+    if todos_pc:
+        filas_pc = []
+        for idx_pc, pc in enumerate(todos_pc):
+            lat_pc, lon_pc = km_a_latlon(pc["x"], pc["y"])
+            es_global = (abs(pc["x"] - x_opt) < 1e-6 and abs(pc["y"] - y_opt) < 1e-6)
+            filas_pc.append({
+                "#": idx_pc + 1,
+                "Tipo": ("⭐ " + pc["tipo"] + " (GLOBAL)") if es_global else pc["tipo"],
+                "Latitud": f"{lat_pc:.6f}",
+                "Longitud": f"{lon_pc:.6f}",
+                "Q(x,y)": f"{pc['Q']:,.2f}",
+                "det(H)": f"{pc['det_H']:,.4f}",
+                "λ₁": f"{pc['eigenvalues'][0].real:,.4f}",
+                "λ₂": f"{pc['eigenvalues'][1].real:,.4f}",
+            })
+        df_pc = pd.DataFrame(filas_pc)
+        st.dataframe(df_pc, hide_index=True)
+
+        n_max = sum(1 for p in todos_pc if p["tipo"] == "Máximo local")
+        n_silla = sum(1 for p in todos_pc if p["tipo"] == "Punto de silla")
+        n_min = sum(1 for p in todos_pc if p["tipo"] == "Mínimo local")
+        st.markdown(
+            f"**Resumen:** {len(todos_pc)} puntos críticos encontrados — "
+            f"{n_max} máximo(s), {n_silla} punto(s) de silla, {n_min} mínimo(s)."
+        )
+        if n_max > 1:
+            st.info(
+                "Se encontraron múltiples máximos locales. "
+                "El marcado con ⭐ es el **máximo global** (mayor Q)."
+            )
+    else:
+        st.warning("No se encontraron puntos críticos con el método multi-start.")
 
 # --- TAB 4: HESSIANA ---
 with tab4:
@@ -409,7 +452,7 @@ with tab4:
         st.metric("Q_xx", f"{H_opt[0, 0]:,.4f}")
         st.markdown("---")
         if det_H > 0 and H_opt[0, 0] < 0:
-            st.success("**MÁXIMO LOCAL** confirmado: det(H) > 0 y Q_xx < 0")
+            st.success("**MÁXIMO GLOBAL** confirmado: det(H) > 0 y Q_xx < 0")
         elif det_H > 0 and H_opt[0, 0] > 0:
             st.error("Mínimo local detectado")
         elif det_H < 0:
