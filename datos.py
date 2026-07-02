@@ -14,14 +14,14 @@ TEMUCO_LON_REF = -72.5904
 # Barrios de Temuco con coordenadas reales y población censal
 BARRIOS_TEMUCO = [
     {"nombre": "Centro",            "lat": -38.7359, "lon": -72.5904, "hab": 11700},
-    {"nombre": "Pueblo Nuevo",      "lat": -38.7051, "lon": -72.5562, "hab": 26043},
+    {"nombre": "Pueblo Nuevo",      "lat": -38.7187, "lon": -72.5613, "hab": 26043},
     {"nombre": "Pedro de Valdivia", "lat": -38.7221, "lon": -72.6171, "hab": 34490},
     {"nombre": "Santa Rosa",        "lat": -38.7395, "lon": -72.5757, "hab": 39584},
     {"nombre": "Amanecer",          "lat": -38.7563, "lon": -72.6241, "hab": 28000},
     {"nombre": "Universidad",       "lat": -38.7472, "lon": -72.6171, "hab": 27201},
     {"nombre": "Av. Alemania",      "lat": -38.7359, "lon": -72.6069, "hab": 15000},
     {"nombre": "Fundo El Carmen",   "lat": -38.7143, "lon": -72.6531, "hab": 50000},
-    {"nombre": "Pueblo Nuevo Norte","lat": -38.6980, "lon": -72.5650, "hab": 12000},
+    {"nombre": "Pueblo Nuevo Norte","lat": -38.6978, "lon": -72.5513, "hab": 12000},
 ]
 
 RADIO_DETECCION_KM = 2.0
